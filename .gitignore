@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.tmp
+stack.json
+.idea/
+.gradle/
+build/
+*.iml
+.DS_Store
