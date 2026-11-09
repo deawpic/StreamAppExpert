@@ -112,3 +112,31 @@ This document defines the governance rules, anti-hallucination protocols, token 
   name: stream_qa_agent
   system_prompt: "You are an expert QA Automation Engineer and Anti-Hallucination Gatekeeper. Statically verify all code artifacts with exit code 0. Run streaming anti-pattern linting to eliminate video freeze, black screen, and seek stutter regressions."
   ```
+
+---
+
+## 🧰 Curated & Tailored Skills Catalog (`.agents/skills/`)
+
+The following 18 specialized skills are integrated and tuned for `StreamAppExpert`:
+
+| Skill Name | Focus & Domain Tuning |
+|---|---|
+| `stream-player-media3` | Media3 ExoPlayer, 252-byte PNG dummy prefix unmasking, SurfaceView, LoudnessEnhancer |
+| `stream-android-mobile` | Mobile Touch Player, VLC/MX gestures, Screen Lock, PiP, Becoming Noisy guard, SDK 36 |
+| `stream-android-tv` | Android TV Leanback, VideoSupportFragment surface, D-pad focus tree navigation |
+| `stream-reverse-engineer` | 2-step tokenplay extraction, AJAX iframe resolvers, m3u8 playlist assembly |
+| `stream-backend-gateway` | FastAPI async streaming proxy, M3U8 chunk rewriter, Redis caching |
+| `android-jetpack-compose-expert` | Compose Material 3, PlayerView in Compose, 48dp minimum touch target enforcement |
+| `kotlin-coroutines-expert` | Concurrency for streaming, StateFlow player states, resilient scraping backoff |
+| `apk-reverse` | APK decompilation with jadx, finding hidden player endpoints, OkHttp interceptor extraction |
+| `protocol-reverse-engineering` | HLS/DASH packet sniffing, token exchange handshakes, anti-bot bypass |
+| `mobile-design` | Cinematic dark streaming design system (`#0A0D14`), thumb-zone player HUD layout |
+| `python-fastapi-development` | High-throughput streaming proxy with StreamingResponse, Pydantic V2 schemas |
+| `redis` | In-memory token expiration (TTL), series catalog caching, sliding-window rate limiting |
+| `web-scraper` | Resilient DOM + Regex fallback extraction, session cookie persistence, header spoofing |
+| `android-dev` | Ultra-lean APK optimization (R8 fullMode, ProGuard), debug key signing for sideloading |
+| `code-review-sensei` | 5-point code review catching streaming regressions (video freeze, seek stutter, black screen) |
+| `anti-hallucination-guardian` | Ground truth verification, zero-test policy, prohibiting autonomous gradle debug |
+| `software-architecture` | Decoupled OTT architecture blueprints, Mermaid flowcharts, ADR drafting |
+| `qa-automation` | Lightweight static AST parsers, streaming rules engine, build guard enforcement |
+

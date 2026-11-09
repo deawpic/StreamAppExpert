@@ -101,7 +101,27 @@ StreamAppExpert/
 │       │   └── SKILL.md
 │       ├── software-architecture/        # OTT Architecture, Mermaid Blueprints
 │       │   └── SKILL.md
-│       └── qa-automation/                # Static Checks, AST Linters, Build Guards
+│       ├── qa-automation/                # Static Checks, AST Linters, Build Guards
+│       │   └── SKILL.md
+│       ├── android-jetpack-compose-expert/# Compose M3, 48dp Targets, PlayerView Binding
+│       │   └── SKILL.md
+│       ├── kotlin-coroutines-expert/     # StateFlow Player States, Resilient Scraping
+│       │   └── SKILL.md
+│       ├── apk-reverse/                  # Decompilation with jadx, Endpoint Discovery
+│       │   └── SKILL.md
+│       ├── protocol-reverse-engineering/ # HLS/DASH Traffic Sniffing, Handshake Analysis
+│       │   └── SKILL.md
+│       ├── mobile-design/                # Cinematic Dark Theme (#0A0D14), Player HUD
+│       │   └── SKILL.md
+│       ├── python-fastapi-development/   # Streaming Proxy, Chunk Streaming, M3U8 Rewrite
+│       │   └── SKILL.md
+│       ├── redis/                        # Token Expiration TTL, Series Metadata Cache
+│       │   └── SKILL.md
+│       ├── web-scraper/                  # DOM-First + Regex Fallback Extraction
+│       │   └── SKILL.md
+│       ├── android-dev/                  # Ultra-Lean APK (<12MB), Debug Key Sideloading
+│       │   └── SKILL.md
+│       └── code-review-sensei/           # 5-Point Review catching Streaming Regressions
 │           └── SKILL.md
 ├── harness/
 │   ├── __init__.py

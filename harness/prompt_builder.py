@@ -23,10 +23,19 @@ ROLE_SKILL_MAP: Dict[str, str] = {
     "stream_player_agent": ".agents/skills/stream-player-media3/SKILL.md",
     "stream_scraper_agent": ".agents/skills/stream-reverse-engineer/SKILL.md",
     "stream_backend_agent": ".agents/skills/stream-backend-gateway/SKILL.md",
-    "stream_reviewer_agent": ".agents/skills/anti-hallucination-guardian/SKILL.md",
-    "reviewer_agent": ".agents/skills/anti-hallucination-guardian/SKILL.md",
+    "stream_reviewer_agent": ".agents/skills/code-review-sensei/SKILL.md",
+    "reviewer_agent": ".agents/skills/code-review-sensei/SKILL.md",
     "stream_qa_agent": ".agents/skills/qa-automation/SKILL.md",
     "qa_agent": ".agents/skills/qa-automation/SKILL.md",
+    "compose_agent": ".agents/skills/android-jetpack-compose-expert/SKILL.md",
+    "coroutines_agent": ".agents/skills/kotlin-coroutines-expert/SKILL.md",
+    "apk_reverse_agent": ".agents/skills/apk-reverse/SKILL.md",
+    "protocol_agent": ".agents/skills/protocol-reverse-engineering/SKILL.md",
+    "mobile_design_agent": ".agents/skills/mobile-design/SKILL.md",
+    "fastapi_agent": ".agents/skills/python-fastapi-development/SKILL.md",
+    "redis_agent": ".agents/skills/redis/SKILL.md",
+    "web_scraper_agent": ".agents/skills/web-scraper/SKILL.md",
+    "android_dev_agent": ".agents/skills/android-dev/SKILL.md",
 }
 
 
