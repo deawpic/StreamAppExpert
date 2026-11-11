@@ -37,7 +37,7 @@ This document defines the governance rules, anti-hallucination protocols, token 
    - **LEANBACK VIDEO SURFACE**: Never subclass raw `PlaybackSupportFragment` without a surface. TV playback fragments must extend `VideoSupportFragment` with `VideoSupportFragmentGlueHost(this)` to attach `SurfaceHolder` to ExoPlayer.
    - **MOBILE TOUCH ERGONOMICS**: Mobile UI must be 100% Jetpack Compose Material 3 with minimum 48×48 dp touch targets. Never import Leanback (`androidx.leanback.*`) or TV Compose in mobile modules.
    - **MASKED TS UNMASKING**: Transparently strip the 252-byte PNG dummy prefix from disguised CDN image segments (`.image`, `.png`) via `MaskedTsDataSource`.
-   - **AUDIO BOOST**: Use Android `LoudnessEnhancer` attached to `player.audioSessionId` for clean hardware volume lift (+2.5dB to +12dB) without clipping.
+   - **AUDIO BOOST & VOLUME SCALING (IRON LAW)**: Default to **Safe Software Volume Scaling directly via `exoPlayer.volume = multiplier`** (1.0x to 2.4x). Autonomous implementation of hardware `LoudnessEnhancer` is STRICTLY DISCOURAGED on Android TV because native AudioFlinger and Amlogic/ZTE SoCs reject AudioEffects on HLS multi-audio passthrough streams, triggering `IllegalStateException`, `ERROR_CODE_AUDIO_TRACK_WRITE_FAILED`, and infinite re-buffering loops. See `techdocs/CASE_STUDY_AUDIO_BOOST_TV_CRASH.md`.
    - **PICTURE-IN-PICTURE (PiP)**: Support seamless auto-PiP on Android 12+ (API 31+) via `setAutoEnterEnabled(true)`. Hide all UI chrome during PiP mode.
    - **TARGET SDK 36**: Mobile must target SDK 36 (Android 16 Baklava) with minSdk 26.
 

@@ -34,16 +34,17 @@ You are a Senior Media Streaming & Player Engineer specializing in Android Media
 - CDN edge servers already cached the file. Adding `no-cache` in OkHttp interceptors forces ExoPlayer to bypass its in-memory/disk buffer, causing extreme stutter, re-buffering delays, and broken scrubbing during seek backward/forward.
 - **Strict Solution**: Only mutate the `Content-Type: video/mp2t` header; preserve the CDN's origin `Cache-Control` header intact.
 
-### 4. Hardware Audio Amplification (`LoudnessEnhancer`)
-- Web rips and pirated video streams often suffer from quiet dialogue (sub-mastered audio).
-- Do NOT use software audio track volume scaling (causes digital clipping/distortion).
-- Use Android's native hardware `LoudnessEnhancer`:
-  ```kotlin
-  val enhancer = LoudnessEnhancer(player.audioSessionId).apply {
-      setTargetGain(gainMilliBels) // e.g. 500 mB (+5dB) or 800 mB (+8dB)
-      enabled = true
-  }
-  ```
+### 4. Audio Amplification & TV Volume Boost Governance
+- Web rips and pirated video streams often suffer from quiet dialogue (sub-mastered audio at -18dB to -24dB LUFS).
+- **CRITICAL LESSON & LAW**: **Default to Safe Linear Software Scaling via `exoPlayer.volume`** (1.0x to 2.4x).
+  * Do NOT attach hardware `LoudnessEnhancer` by default. On Android TV chipsets (e.g. Amlogic S905X4 / ZTE B866V2K) and HLS multi-audio variants (`audio_tha.m3u8`), `LoudnessEnhancer` triggers native AudioFlinger rejection (`IllegalStateException`), crashes the AudioTrack, and induces infinite buffering loops.
+  * **Standard Acoustic Multipliers**:
+    - `100%` = 1.00x (Reference)
+    - `150%` = 1.35x (+2.6 dB lift)
+    - `200%` = 1.65x (+4.3 dB dialogue boost)
+    - `250%` = 2.00x (+6.0 dB heavy boost)
+    - `300%` = 2.40x (+7.6 dB max ceiling, preventing speaker clipping)
+  * See full architectural report in `techdocs/CASE_STUDY_AUDIO_BOOST_TV_CRASH.md`.
 
 ### 5. Custom LoadControl & Buffer Tuning
 ```kotlin
