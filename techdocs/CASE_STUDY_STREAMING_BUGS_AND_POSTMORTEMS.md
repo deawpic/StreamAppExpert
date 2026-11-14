@@ -309,6 +309,30 @@ fun start(context: Context, streamUrl: String, title: String, videoId: String, p
 
 ---
 
+### Bug 9: Audio Playing with Black Screen & Stuck Direct API Spinner (Compose Race Condition)
+
+#### 🔴 Symptom
+When opening a video from Watch History, audio plays clearly through the speakers, but the screen stays 100% black with the Direct API loading spinner (`CircularProgressIndicator`) spinning indefinitely in the center.
+
+#### 🔍 Root Cause
+1. **Screen Swapping Anti-Pattern**: The UI conditionally swapped `PlayerScreen` out with a loading Box:
+   ```kotlin
+   if (isResolving || player == null) {
+       Box(...) // Fullscreen black box with spinner
+   } else {
+       PlayerScreen(...)
+   }
+   ```
+   When `PlayerScreen` is not in the composition tree, `AndroidView(PlayerView)` is unmounted and has no `SurfaceView` attached to the window.
+2. **State Notification Race Condition**: `isResolvingStreamState.value = false` was called *before* `exoPlayer` was initialized, causing Compose to recompose while `player` was still `null`. Because `exoPlayer` was a plain non-State JVM property (`var exoPlayer: ExoPlayer? = null`), subsequent assignment to `exoPlayer` did NOT trigger recomposition, stranding Compose in the loading spinner branch while ExoPlayer played audio in the background.
+
+#### ✅ Golden Solution (How It Was Fixed)
+1. **Always Mount `PlayerScreen`**: Build and bind `ExoPlayer` in `onCreate()` before calling `setContent()`. `PlayerScreen` and `AndroidView(PlayerView)` remain permanently mounted in the Compose hierarchy.
+2. **Overlay Pattern Instead of Screen Swapping**: Render the Direct API loading spinner as a semi-transparent overlay *on top* of `PlayerView` rather than unmounting the player.
+3. **Bind Surface in Both Factory and Update**: Ensure `playerView.player = player` is present in both `factory` and `update` blocks of `AndroidView`.
+
+---
+
 ## 🛡️ Summary of Non-Negotiable Directives for Agents
 
 | Rule | Area | Requirement |
@@ -319,4 +343,5 @@ fun start(context: Context, streamUrl: String, title: String, videoId: String, p
 | **Compose Key Deduplication** | Jetpack Compose | Apply `.distinctBy { it.id }` and compound keys `"${item.id}_$index"` |
 | **Semantic JSON Over Regex** | Reverse Eng. | Extract config JSON via `JSONObject` before using regex fallbacks |
 | **Safe Software Audio Boost** | Audio Engineering | Use `exoPlayer.volume = multiplier`; avoid hardware `LoudnessEnhancer` |
+| **Always Mount Player Surface** | Compose / Media3 | Keep `PlayerView` mounted; render loading indicators as overlays, never unmounting player |
 | **Deterministic Verification** | QA / Engineering | All code must pass bracket balancing and AST validation exit code 0 |
