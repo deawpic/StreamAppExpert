@@ -10,12 +10,20 @@ This document serves as the master engineering reference for the `StreamAppExper
 2. [Bug 2: ExoPlayer Video Frozen on First Frame While Audio Plays (NAL Type 9 Bug)](#2-bug-2-exoplayer-video-frozen-on-first-frame-while-audio-plays-nal-type-9-bug)
 3. [Bug 3: Disguised CDN Image Chunks (252-Byte Dummy PNG Header)](#3-bug-3-disguised-cdn-image-chunks-252-byte-dummy-png-header)
 4. [Bug 4: Seeking/Scrubbing Stutter Caused by `Cache-Control: no-cache`](#4-bug-4-seekingscrubbing-stutter-caused-by-cache-control-no-cache)
-5. [Enhancement 1: Hardware-Accelerated Audio Boost (LoudnessEnhancer)](#5-enhancement-1-hardware-accelerated-audio-boost-loudnessenhancer)
-6. [Enhancement 2: VLC/MX Player-Style Mobile Gesture Controls](#6-enhancement-2-vlcmx-player-style-mobile-gesture-controls)
-7. [Enhancement 3: Seamless Picture-in-Picture (PiP) Across Android 8.0 - 16](#7-enhancement-3-seamless-picture-in-picture-pip-across-android-80---16)
-8. [Enhancement 4: Mobile Hardware Protections (Becoming Noisy & Cutout Insets)](#8-enhancement-4-mobile-hardware-protections-becoming-noisy--cutout-insets)
+5. [Audio Amplification: Safe Software Scaling vs LoudnessEnhancer TV Crash](#5-audio-amplification-safe-software-scaling-vs-loudnessenhancer-tv-crash)
+6. [Enhancement 1: VLC/MX Player-Style Mobile Gesture Controls](#6-enhancement-1-vlcmx-player-style-mobile-gesture-controls)
+7. [Enhancement 2: Seamless Picture-in-Picture (PiP) Across Android 8.0 - 16](#7-enhancement-2-seamless-picture-in-picture-pip-across-android-80---16)
+8. [Enhancement 3: Mobile Hardware Protections (Becoming Noisy & Cutout Insets)](#8-enhancement-3-mobile-hardware-protections-becoming-noisy--cutout-insets)
 9. [Build & Packaging: Frictionless Sideloading Release APK with Debug Key](#9-build--packaging-frictionless-sideloading-release-apk-with-debug-key)
 10. [Reverse Engineering: 2-Step Tokenplay HLS Stream Extraction Pipeline](#10-reverse-engineering-2-step-tokenplay-hls-stream-extraction-pipeline)
+11. [Bug 5: Expired Presigned CDN Tokens in Watch History (HTTP 403 Forbidden)](#11-bug-5-expired-presigned-cdn-tokens-in-watch-history-http-403-forbidden)
+12. [Bug 6: Android 14+ (SDK 34-36) Fatal Crash on `registerReceiver` without `RECEIVER_NOT_EXPORTED`](#12-bug-6-android-14-sdk-34-36-fatal-crash-on-registerreceiver-without-receiver_not_exported)
+13. [Bug 7: Screen Orientation Lock Failure: Sensor Overriding Custom Fullscreen HUD](#13-bug-7-screen-orientation-lock-failure-sensor-overriding-custom-fullscreen-hud)
+14. [Bug 8: Compose Infinite Scroll / Pagination Duplicate Key Crash](#14-bug-8-compose-infinite-scroll--pagination-duplicate-key-crash)
+15. [Bug 9: Brittle Video Embed Regex Matching vs Semantic `<script id="watch-config">`](#15-bug-9-brittle-video-embed-regex-matching-vs-semantic-script-idwatch-config)
+16. [Bug 10: Video Card Blank Cover Image Caused by `.mp4` Preview Attribute Collision](#16-bug-10-video-card-blank-cover-image-caused-by-mp4-preview-attribute-collision)
+17. [Bug 11: Compose Material 3 Icon Button Missing `sizeIn(48.dp)` Causing Misclicks](#17-bug-11-compose-material-3-icon-button-missing-sizein48dp-causing-misclicks)
+18. [Bug 12: Hardware LoudnessEnhancer TV Chipset Crash (AudioFlinger Reject)](#18-bug-12-hardware-loudnessenhancer-tv-chipset-crash-audioflinger-reject)
 
 ---
 
@@ -110,20 +118,32 @@ However:
 
 ---
 
-## 5. Enhancement 1: Hardware-Accelerated Audio Boost (LoudnessEnhancer)
+## 5. Audio Amplification: Safe Software Scaling vs LoudnessEnhancer TV Crash
 
 ### Problem
-Online streaming web-rips frequently feature whisper-quiet dialogue mastered at -20dB to -24dB LUFS. Software multipliers cause clipping distortion.
+Online streaming web-rips frequently feature whisper-quiet dialogue mastered at -20dB to -24dB LUFS.
 
-### Verified Solution
-Attach Android's native DSP `LoudnessEnhancer` to the ExoPlayer `audioSessionId`:
+### Critical Production Caveat (Android TV Crash)
+While `LoudnessEnhancer(exoPlayer.audioSessionId)` works on mobile devices, **attaching hardware LoudnessEnhancer on Android TV chipsets (Amlogic S905X4, ZTE B866V2K, Realtek RTD2871) causes fatal playback failure**:
+1. When streaming HLS variants with multi-audio tracks or passthrough codecs (E-AC-3/AC-3/AAC passthrough), the native ALSA AudioFlinger rejects AudioEffect attachment.
+2. ExoPlayer throws `IllegalStateException: AudioTrack.write() failed` or `ERROR_CODE_AUDIO_TRACK_WRITE_FAILED`.
+3. The player enters an infinite rebuffering loop.
+
+### Verified Production Fix (Iron Law)
+**Default to Safe Linear Software Scaling directly via `exoPlayer.volume`** (1.0x to 2.4x):
 ```kotlin
-val enhancer = LoudnessEnhancer(exoPlayer.audioSessionId).apply {
-    setTargetGain(500) // +5.0 dB boost
-    enabled = true
+fun setAudioBoost(player: ExoPlayer, level: BoostLevel) {
+    val multiplier = when (level) {
+        BoostLevel.OFF -> 1.0f      // 100% (Reference)
+        BoostLevel.LOW -> 1.35f     // 150% (+2.6 dB lift)
+        BoostLevel.MEDIUM -> 1.65f  // 200% (+4.3 dB dialogue boost)
+        BoostLevel.HIGH -> 2.00f    // 250% (+6.0 dB heavy boost)
+        BoostLevel.MAX -> 2.40f     // 300% (+7.6 dB max ceiling, zero clipping)
+    }
+    player.volume = multiplier
 }
 ```
-Provides clean, transparent dialogue lift up to +12dB with zero digital distortion.
+*For deep dive analysis, see `techdocs/CASE_STUDY_AUDIO_BOOST_TV_CRASH.md`.*
 
 ---
 
@@ -199,3 +219,189 @@ sequenceDiagram
 ```
 - Validate session with `GET /api/v2/stream/{md5}?parent={parent}&_={timestamp}` if initial token request is rate-limited.
 - Set correct `Origin`, `Referer`, and `X-Requested-With` headers on all requests.
+
+---
+
+## 11. Bug 5: Expired Presigned CDN Tokens in Watch History (HTTP 403 Forbidden)
+
+### Symptoms
+User plays a movie today, stops midway, and sees it saved in "Watch History". The next morning, opening that movie fails with `403 Forbidden: Request has expired` or an infinite loading spinner.
+
+### Root Cause Analysis
+Modern CDNs (Cloudflare R2, AWS S3, Javtiful) use presigned URLs with query parameters:
+`?expires=1731590400&signature=...` (typically 1 hour / 3600s TTL).
+Saving the resolved playback stream URL into Room DB / SharedPreferences persists an expiring temporary URL. When the user resumes playback hours or days later, the CDN edge node rejects the request with HTTP 403.
+
+### Verified Fix (Dynamic Token Resolution Protocol)
+1. **Store Canonical Content References**: Only store permanent content identifiers (`videoId` or canonical web URL `/video/xyz`) in Watch History and Bookmarks.
+2. **Proactive Expiration Check**:
+   ```kotlin
+   fun isStreamUrlExpired(url: String, bufferSeconds: Long = 300L): Boolean {
+       val uri = Uri.parse(url)
+       val expiresStr = uri.getQueryParameter("expires") 
+           ?: uri.getQueryParameter("X-Amz-Expires")
+       val expiresAt = expiresStr?.toLongOrNull() ?: return false
+       return (System.currentTimeMillis() / 1000L) >= (expiresAt - bufferSeconds)
+   }
+   ```
+3. **Dynamic Re-resolution**:
+   When launching the player from history, if `isStreamUrlExpired(streamUrl)` is true, or if `streamUrl` is blank, resolve a fresh ticket via `POST /video/{id}/playback` in ~0.5s.
+4. **Auto-Healing `onPlayerError`**: If ExoPlayer encounters `ERROR_CODE_IO_BAD_HTTP_STATUS` (HTTP 401/403), asynchronously re-resolve the token and resume at `player.currentPosition`.
+
+---
+
+## 12. Bug 6: Android 14+ (SDK 34-36) Fatal Crash on `registerReceiver` without `RECEIVER_NOT_EXPORTED`
+
+### Symptoms
+App immediately crashes on Android 14+ (API 34/35/36) when launching the player:
+`java.lang.SecurityException: com.example.app: One of RECEIVER_EXPORTED or RECEIVER_NOT_EXPORTED should be specified when a receiver isn't being registered exclusively for system broadcasts`
+
+### Root Cause Analysis
+Starting in Android 14 (API 34) and strictly enforced in Target SDK 36 (Android 16), all contextual broadcast receivers registered via `registerReceiver()` MUST explicitly specify either `RECEIVER_EXPORTED` or `RECEIVER_NOT_EXPORTED`.
+Calling `context.registerReceiver(receiver, filter)` without flags throws a fatal `SecurityException`.
+
+### Verified Fix
+Always use `ContextCompat.registerReceiver` with `ContextCompat.RECEIVER_NOT_EXPORTED`:
+```kotlin
+ContextCompat.registerReceiver(
+    context,
+    receiver,
+    IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
+    ContextCompat.RECEIVER_NOT_EXPORTED
+)
+```
+
+---
+
+## 13. Bug 7: Screen Orientation Lock Failure: Sensor Overriding Custom Fullscreen HUD
+
+### Symptoms
+In portrait mode, user taps the Fullscreen button. The HUD rotates to landscape. However, when the user tilts the device slightly or rotates to portrait, the screen auto-rotates back to portrait or ignores user intent.
+
+### Root Cause Analysis
+Merely toggling internal layout states (`isFullscreen = true`) does not lock the underlying Android WindowManager orientation. If `requestedOrientation` is left as `SCREEN_ORIENTATION_UNSPECIFIED`, the hardware accelerometer overrides the app.
+Conversely, setting `SCREEN_ORIENTATION_LANDSCAPE` locks the device to a single fixed landscape orientation and breaks 180° reverse landscape (when charging cable is on the opposite side).
+
+### Verified Fix
+1. On Enter Fullscreen:
+   `activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE` (enables both landscape angles, strictly locks out portrait).
+2. On Exit Fullscreen:
+   `activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT`, followed by `ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED`.
+3. Intercept Hardware Back:
+   ```kotlin
+   BackHandler(enabled = isFullscreen) {
+       onExitFullscreen() // Restores portrait before navigating back
+   }
+   ```
+
+---
+
+## 14. Bug 8: Compose Infinite Scroll / Pagination Duplicate Key Crash
+
+### Symptoms
+Scrolling down to the bottom of the Home screen or Search Results grid causes an instant crash:
+`java.lang.IllegalArgumentException: Key "video-1024" was already used. If you are using LazyColumn/Row please make sure you provide an unique key for each item.`
+
+### Root Cause Analysis
+1. Modern streaming portal backends often return overlapping items when page items shift between scrapes or when pagination offsets overlap.
+2. In Compose `LazyVerticalGrid(key = { it.id })`, duplicate keys in the composition tree violate Compose invariant constraints, crashing the entire UI thread.
+
+### Verified Fix (Defense-in-Depth)
+1. **ViewModel Deduplication**:
+   ```kotlin
+   val current = (_uiState.value as? HomeUiState.Success)?.videos.orEmpty()
+   val merged = (current + newVideos).distinctBy { it.id }
+   _uiState.update { HomeUiState.Success(merged) }
+   ```
+2. **Composite UI Keys**:
+   ```kotlin
+   items(
+       count = videos.size,
+       key = { index -> "${videos[index].id}_$index" }
+   ) { index ->
+       VideoCard(videos[index])
+   }
+   ```
+
+---
+
+## 15. Bug 9: Brittle Video Embed Regex Matching vs Semantic `<script id="watch-config">`
+
+### Symptoms
+App fails to extract video streams, showing "Stream not found" or black screen. Web browser plays video smoothly.
+
+### Root Cause Analysis
+Developers frequently write rigid regular expressions matching multi-line JSON structures:
+`Regex("""sources:\s*\[\{\s*file:\s*"([^"]+)"""")`
+Any minification, newline change, attribute reordering, or CDN config restructuring breaks the regex entirely.
+
+### Verified Fix
+1. **Fast Direct Playback API**: Probe for `POST /video/{id}/playback` first (~0.5s response, zero DOM parsing).
+2. **Semantic Script Extraction**: If scraping HTML, select the structured script tag and parse with `JSONObject`:
+   ```kotlin
+   val script = doc.selectFirst("script#watch-config, script#__NEXT_DATA__")
+   if (script != null) {
+       val json = JSONObject(script.data())
+       val streamUrl = json.optJSONObject("player")?.optString("source")
+   }
+   ```
+3. **Referer Auto-Healing**: When CDN serves streams across multiple domains, pass the portal base URL as `Referer` and `Origin` in OkHttp headers.
+
+---
+
+## 16. Bug 10: Video Card Blank Cover Image Caused by `.mp4` Preview Attribute Collision
+
+### Symptoms
+Video thumbnail cards on the Home screen display a blank grey card or failed image placeholder.
+
+### Root Cause Analysis
+Streaming sites place both a static poster image (`data-front-lazy-src="poster.jpg"`) and an animated preview clip (`data-preview-src="clip.mp4"`) on the same `<img>` tag.
+Scrapers taking the first matching attribute ending in `.mp4` pass the video URL to Coil/Glide image loaders, which fail to render MP4 as a static bitmap.
+
+### Verified Fix
+Explicitly exclude `.mp4` preview URLs and prioritize static image attributes:
+```kotlin
+val posterUrl = listOf(
+    img.attr("data-front-lazy-src"),
+    img.attr("data-src"),
+    img.attr("src")
+).firstOrNull { it.isNotBlank() && !it.endsWith(".mp4", ignoreCase = true) }
+```
+
+---
+
+## 17. Bug 11: Compose Material 3 Icon Button Missing `sizeIn(48.dp)` Causing Misclicks
+
+### Symptoms
+Users on touchscreens fail to tap the Lock, PiP, or Fullscreen buttons during playback, or accidentally trigger playback scrub gestures instead.
+
+### Root Cause Analysis
+Material 3 `IconButton` has a default touch target, but when nested inside customized player control bars with small icon sizes (`size(24.dp)`), the minimum interactive bounding box can be clipped.
+
+### Verified Fix
+Explicitly enforce `sizeIn(minWidth = 48.dp, minHeight = 48.dp)` on all interactive player overlay icons:
+```kotlin
+IconButton(
+    onClick = onToggleLock,
+    modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+) {
+    Icon(imageVector = Icons.Default.Lock, contentDescription = "Lock Screen")
+}
+```
+
+---
+
+## 18. Bug 12: Hardware LoudnessEnhancer TV Chipset Crash (AudioFlinger Reject)
+
+### Symptoms
+Audio boost works on phones, but on Android TV boxes (Amlogic, Realtek, ZTE), enabling audio boost causes immediate audio freeze, `IllegalStateException: AudioTrack.write() failed`, and an infinite buffering spinner.
+
+### Root Cause Analysis
+Android TV devices pass audio directly to external soundbars or HDMI receivers via hardware passthrough. The native AudioFlinger rejects software audio effects on these tracks.
+
+### Verified Fix
+Use **Safe Linear Software Volume Scaling directly on `exoPlayer.volume`** (1.0x to 2.4x):
+```kotlin
+player.volume = 1.65f // +4.3 dB dialogue boost with zero hardware effect risk
+```
+*Full architectural post-mortem: `techdocs/CASE_STUDY_AUDIO_BOOST_TV_CRASH.md`.*

@@ -16,17 +16,23 @@ You are an expert Code Reviewer and Anti-Hallucination Gatekeeper evaluating pul
 - **Video Freeze Check**: Ensure `FLAG_DETECT_ACCESS_UNITS` is NOT present in any HLS extractor initialization.
 - **Cache Header Check**: Ensure `Cache-Control: no-cache` is NOT being injected into video chunk interceptors (must preserve CDN `max-age`).
 - **TV Video Surface Check**: In Android TV, ensure playback fragments extend `VideoSupportFragment` with `VideoSupportFragmentGlueHost(this)` to prevent black screen.
-- **Mobile Touch Bounds**: Verify that every clickable Compose element has at least `48.dp` minimum width and height.
+- **Dynamic Presigned Token Resolution**: Verify that Watch History and Room databases store canonical content IDs (`/video/xyz`), NEVER raw presigned URLs with `expires=` or `X-Amz-Expires=`. Ensure `isStreamUrlExpired()` checks and refreshes URLs dynamically.
+- **Safe TV Audio Boost**: Ensure Android TV clients do NOT instantiate hardware `LoudnessEnhancer` on HLS multi-audio streams (triggers `AudioTrack` write failure and crash). Use safe software volume scaling (`exoPlayer.volume = multiplier`).
+- **Mobile Touch Bounds**: Verify that every clickable Compose element has at least `48.dp` minimum width and height (`Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)`).
 - **Zero Leanback in Mobile**: Verify that no `androidx.leanback` or `androidx.tv` classes are imported in mobile packages.
 
-### 2. 🐛 Correctness & State Bugs
-- Are ExoPlayer lifecycle events handled properly in `DisposableEffect` (pause on `ON_PAUSE`)?
-- Are coroutine jobs launched in `viewModelScope` rather than unconfined global scopes?
-- Are null values safely handled during regex and HTML parsing?
+### 2. 🐛 Correctness, Security & Lifecycle Bugs
+- **Android 14+ (SDK 34-36) Receiver Security**: Ensure `ContextCompat.registerReceiver` explicitly specifies `ContextCompat.RECEIVER_NOT_EXPORTED` (e.g. for `ACTION_AUDIO_BECOMING_NOISY`). Omitting crashes instantly with `SecurityException`.
+- **Compose Duplicate Key Crash**: Verify that `LazyVerticalGrid` and `LazyColumn` with pagination deduplicate items (`distinctBy { it.id }`) or use compound keys (`"${item.id}_$index"`) to prevent `IllegalArgumentException: Key was already used`.
+- **Fullscreen Landscape Sensor Lock**: Verify that entering fullscreen mode requests `ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE`, exits to `PORTRAIT` then `UNSPECIFIED`, and wires `BackHandler(enabled = isFullscreen)`.
+- **Semantic JSON Extraction**: Verify web scrapers parse `<script id="watch-config">` or `__NEXT_DATA__` via structured `JSONObject` rather than brittle multi-line regex.
+- **ExoPlayer Lifecycle**: Ensure player events are managed in `DisposableEffect` (pause on `ON_PAUSE`, release on `onDispose`).
+- **Coroutine Scope**: Are background jobs launched in `viewModelScope` rather than unconfined global scopes?
 
 ### 3. 🔒 Security & Anti-Bot Protection
 - Are authentication tokens and MD5 hashes safely handled without logging secrets?
 - Are User-Agent, Referer, and Origin headers correctly configured for gateway requests?
+- Does OkHttp auto-heal Referer headers when stream redirects across CDN domains?
 
 ### 4. ⚡ Performance & Memory
 - Are heavy regex patterns compiled once (`companion object`) rather than inside loops?

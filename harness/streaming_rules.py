@@ -9,8 +9,11 @@ Encapsulates real-world empirical streaming bug fixes, anti-patterns, and archit
 6. GRADLE_RELEASE_DEBUG_SIGNING: Enforces debug key signing on release build for easy sideloading.
 7. GRADLE_MINIMAL_APK_SETTINGS: Enforces isMinifyEnabled and isShrinkResources.
 8. MASKED_TS_PREFIX_OFFSET: Ensures 252-byte PNG dummy prefix skip offset is strictly maintained.
-9. SOUND_BOOST_LOUDNESS_ENHANCER: Verifies LoudnessEnhancer attached to ExoPlayer audioSessionId.
+9. SOUND_BOOST_SAFE_SCALING: Warns against hardware LoudnessEnhancer on TV SoCs (causes crash/re-buffering).
 10. PIP_LIFECYCLE_COMPAT: Ensures setAutoEnterEnabled(true) on API 31+ with aspect ratio config.
+11. ANDROID_14_RECEIVER_EXPORT_FLAG: Enforces RECEIVER_NOT_EXPORTED on registerReceiver (prevents SecurityException).
+12. FULLSCREEN_ORIENTATION_SENSOR_LOCK: Recommends SCREEN_ORIENTATION_SENSOR_LANDSCAPE for natural 180-deg flip.
+13. COMPOSE_LAZY_ITEMS_DUPLICATE_KEY: Recommends deduplication and composite keys for pagination.
 """
 
 from __future__ import annotations
@@ -157,23 +160,24 @@ class StreamingRulesEngine:
                     )
                 )
 
-        # Rule 6: SOUND_BOOST_LOUDNESS_ENHANCER
-        if "SoundBoost" in rel_path or "SoundBoostManager" in content:
-            if "LoudnessEnhancer" not in content:
-                violations.append(
-                    StreamingRuleViolation(
-                        rule_id="SOUND_BOOST_LOUDNESS_ENHANCER",
-                        rule_name="Hardware-Accelerated Audio Boost",
-                        severity="WARNING",
-                        file_path=rel_path,
-                        line_number=None,
-                        message="SoundBoostManager does not utilize Android 'LoudnessEnhancer'. Software amplification may cause audio distortion/clipping.",
-                        recommendation="Use android.media.audiofx.LoudnessEnhancer attached to player.audioSessionId for clean hardware-boosted sound.",
-                    )
+        # Rule 6: SOUND_BOOST_SAFE_SCALING
+        # Hardware LoudnessEnhancer crashes on TV SoCs (Amlogic, ZTE) with HLS multi-audio streams
+        is_tv = "tv" in rel_path.lower()
+        if "LoudnessEnhancer" in content and is_tv:
+            violations.append(
+                StreamingRuleViolation(
+                    rule_id="SOUND_BOOST_SAFE_SCALING",
+                    rule_name="Hardware Audio Effect TV Crash Risk",
+                    severity="WARNING",
+                    file_path=rel_path,
+                    line_number=None,
+                    message="Using hardware 'LoudnessEnhancer' on Android TV triggers AudioFlinger rejection and infinite rebuffering on HLS multi-audio streams.",
+                    recommendation="Use safe linear software volume scaling via 'exoPlayer.volume = multiplier' (1.0x - 2.4x) as documented in CASE_STUDY_AUDIO_BOOST_TV_CRASH.md.",
                 )
+            )
 
         # Rule 7: PIP_LIFECYCLE_COMPAT
-        if "PictureInPicture" in content or "enterPictureInPictureMode" in content:
+        if "enterPictureInPictureMode(" in content or "PictureInPictureParams.Builder" in content:
             if "setAutoEnterEnabled" not in content and "Build.VERSION_CODES.S" not in content:
                 violations.append(
                     StreamingRuleViolation(
@@ -186,6 +190,60 @@ class StreamingRulesEngine:
                         recommendation="Add setAutoEnterEnabled(true) in PictureInPictureParams for smooth auto-PiP when user navigates home.",
                     )
                 )
+
+        # Rule 8: ANDROID_14_RECEIVER_EXPORT_FLAG
+        # Calling registerReceiver without specifying export flag causes fatal SecurityException on Android 14+ (SDK 34-36)
+        if "registerReceiver" in content:
+            for idx, line in enumerate(lines, 1):
+                if "registerReceiver(" in line and "unregisterReceiver(" not in line and not line.strip().startswith("//"):
+                    # Check if exported flag is passed in the call (look ahead up to 6 lines for multi-line calls)
+                    surrounding = " ".join(lines[idx - 1: min(idx + 6, len(lines))])
+                    if "RECEIVER_NOT_EXPORTED" not in surrounding and "RECEIVER_EXPORTED" not in surrounding:
+                        violations.append(
+                            StreamingRuleViolation(
+                                rule_id="ANDROID_14_RECEIVER_EXPORT_FLAG",
+                                rule_name="Android 14+ Missing Receiver Export Flag Crash",
+                                severity="ERROR",
+                                file_path=rel_path,
+                                line_number=idx,
+                                message="Calling registerReceiver without RECEIVER_NOT_EXPORTED or RECEIVER_EXPORTED causes fatal SecurityException on Android 14+ (SDK 34-36).",
+                                recommendation="Use ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED).",
+                            )
+                        )
+
+        # Rule 9: FULLSCREEN_ORIENTATION_SENSOR_LOCK
+        # Using raw SCREEN_ORIENTATION_LANDSCAPE instead of SENSOR_LANDSCAPE prevents natural 180-deg flip
+        if "SCREEN_ORIENTATION_LANDSCAPE" in content and "SCREEN_ORIENTATION_SENSOR_LANDSCAPE" not in content:
+            for idx, line in enumerate(lines, 1):
+                if "SCREEN_ORIENTATION_LANDSCAPE" in line and not line.strip().startswith("//"):
+                    violations.append(
+                        StreamingRuleViolation(
+                            rule_id="FULLSCREEN_ORIENTATION_SENSOR_LOCK",
+                            rule_name="Fullscreen Orientation Sensor Lock Best Practice",
+                            severity="WARNING",
+                            file_path=rel_path,
+                            line_number=idx,
+                            message="Found SCREEN_ORIENTATION_LANDSCAPE. This locks to one landscape orientation and ignores natural 180-degree sensor flipping.",
+                            recommendation="Use ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE for seamless reverse-landscape gyro support.",
+                        )
+                    )
+
+        # Rule 10: COMPOSE_LAZY_ITEMS_DUPLICATE_KEY
+        # Using simple key = { it.id } on paginated lists causes IllegalArgumentException if duplicate items exist
+        if "LazyVerticalGrid" in content or "LazyColumn" in content:
+            for idx, line in enumerate(lines, 1):
+                if re.search(r'items\s*\([^)]*key\s*=\s*\{\s*(?:it|\w+)\.id\s*\}', line) and not line.strip().startswith("//"):
+                    violations.append(
+                        StreamingRuleViolation(
+                            rule_id="COMPOSE_LAZY_ITEMS_DUPLICATE_KEY",
+                            rule_name="Compose Pagination Duplicate Key Crash Risk",
+                            severity="WARNING",
+                            file_path=rel_path,
+                            line_number=idx,
+                            message="Using raw 'it.id' as Compose Lazy item key crashes with IllegalArgumentException if pagination yields duplicate items.",
+                            recommendation="Deduplicate via .distinctBy { it.id } in ViewModel and use compound key '${it.id}_$index' in Compose.",
+                        )
+                    )
 
         return violations
 

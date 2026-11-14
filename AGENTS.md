@@ -40,10 +40,19 @@ This document defines the governance rules, anti-hallucination protocols, token 
    - **AUDIO BOOST & VOLUME SCALING (IRON LAW)**: Default to **Safe Software Volume Scaling directly via `exoPlayer.volume = multiplier`** (1.0x to 2.4x). Autonomous implementation of hardware `LoudnessEnhancer` is STRICTLY DISCOURAGED on Android TV because native AudioFlinger and Amlogic/ZTE SoCs reject AudioEffects on HLS multi-audio passthrough streams, triggering `IllegalStateException`, `ERROR_CODE_AUDIO_TRACK_WRITE_FAILED`, and infinite re-buffering loops. See `techdocs/CASE_STUDY_AUDIO_BOOST_TV_CRASH.md`.
    - **PICTURE-IN-PICTURE (PiP)**: Support seamless auto-PiP on Android 12+ (API 31+) via `setAutoEnterEnabled(true)`. Hide all UI chrome during PiP mode.
    - **TARGET SDK 36**: Mobile must target SDK 36 (Android 16 Baklava) with minSdk 26.
+   - **DYNAMIC PRESIGNED TOKEN RESOLUTION (IRON LAW)**: Never persist short-lived presigned CDN stream URLs (`expires=...`, `X-Amz-Expires=...`) in Watch History or favorites. Always store the canonical content identifier (`/video/{id}`). Before playback, inspect token expiration via `isStreamUrlExpired()`. If expired or on `HTTP 403`, dynamically exchange a fresh ticket via the Direct Playback API (`POST /video/{id}/playback`) and seek to `currentPositionMs`.
+   - **ANDROID 14+ (SDK 36) BROADCAST RECEIVER SECURITY**: All runtime `BroadcastReceiver` registrations (e.g. `AudioManager.ACTION_AUDIO_BECOMING_NOISY`) MUST use `ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)` wrapped in try-catch. Failure to declare export flags on API 34+ causes an immediate fatal `SecurityException` crash during Activity `onCreate()`.
+   - **STRICT FULLSCREEN LANDSCAPE LOCK**: Dedicated Fullscreen button must set `ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE` to strictly prevent unwanted portrait auto-rotation until the user explicitly taps shrink/exit or Back.
+   - **COMPOSE PAGINATION DEDUPLICATION**: In infinite scroll feeds (`LazyVerticalGrid`), always enforce `.distinctBy { it.id }` and compound item keys (`"${item.id}_$index"`) to prevent fatal `IllegalArgumentException: Key was already used` crashes on overlapping server pages.
+   - **SEMANTIC JSON EXTRACTION OVER BRITTLE REGEX**: Never rely on brittle regex expecting strict JSON key order (`"endpoint"` before `"ticket"`). First parse `<script id="watch-config" type="application/json">` using `JSONObject`. Implement independent regex fallbacks, auto-construct endpoints (`/video/$id/playback`), and auto-heal by re-fetching the referer page if the ticket is blank.
 
 7. **⚙️ Deterministic State Machine Contract**:
    - All collaborating agents operating under the harness MUST emit Structured Output adhering to the contract defined in `harness/schemas.py`.
    - Task stack transitions, handoffs, and circuit breaking are managed deterministically by the harness engine via `stack.json`.
+
+8. **📚 Real-World Streaming Bug Knowledge Base & Post-Mortems**:
+   - All agents MUST review and adhere to the post-mortem architectural patterns documented in `techdocs/CASE_STUDY_STREAMING_BUGS_AND_POSTMORTEMS.md`.
+   - Never repeat the documented bugs (History expiration 403, Receiver SecurityException, rigid regex failure, Compose duplicate key crash, and audio boost rebuffering).
 
 ---
 

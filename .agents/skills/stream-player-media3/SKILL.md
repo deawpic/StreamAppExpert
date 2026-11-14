@@ -1,6 +1,6 @@
 ---
 name: stream-player-media3
-description: "Production-grade Media3 ExoPlayer streaming engineering: HLS disguised stream unmasking (252-byte PNG dummy prefix), surface view binding, cache-control preservation, hardware loudness enhancer, and custom LoadControl."
+description: "Production-grade Media3 ExoPlayer streaming engineering: HLS disguised stream unmasking (252-byte PNG dummy prefix), surface view binding, cache-control preservation, safe software volume boost, dynamic presigned token resolution, and custom LoadControl."
 risk: safe
 source: stream-app-expert
 date_added: "2026-11-09"
@@ -58,3 +58,39 @@ val loadControl = DefaultLoadControl.Builder()
     .setPrioritizeTimeOverSizeThresholds(true)
     .build()
 ```
+
+### 6. Dynamic Presigned Token Resolution & Auto-Refresh (Iron Law)
+- **Bug Symptom**: Video plays perfectly today, but resuming tomorrow from Watch History or bookmarks fails with `HTTP 403 Forbidden` (`Request has expired`).
+- **Root Cause**: Modern streaming CDNs (AWS S3 presigned URLs, Cloudflare R2, Javtiful CDN) issue short-lived temporary signatures (`expires=1731590000` or `X-Amz-Expires=3600`). Storing raw presigned URLs in Room/SharedPreferences turns them into dead links after 1 hour.
+- **Strict Architecture**:
+  1. **Canonical Content Reference**: Watch history and bookmarks must store the canonical content identifier (`contentId` or relative path `/video/xyz`), NOT the transient presigned stream URL.
+  2. **Proactive Expiration Verification**:
+     ```kotlin
+     fun isStreamUrlExpired(url: String, bufferSeconds: Long = 300L): Boolean {
+         val uri = Uri.parse(url)
+         val expiresStr = uri.getQueryParameter("expires") 
+             ?: uri.getQueryParameter("X-Amz-Expires") 
+             ?: uri.getQueryParameter("token_expires")
+         val expiresAt = expiresStr?.toLongOrNull() ?: return false
+         val now = System.currentTimeMillis() / 1000L
+         return now >= (expiresAt - bufferSeconds)
+     }
+     ```
+  3. **Reactive HTTP 403 / 401 Auto-Recovery**:
+     In `Player.Listener.onPlayerError(error: PlaybackException)`:
+     ```kotlin
+     if (error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS) {
+         val currentPos = player.currentPosition
+         // Fetch fresh playback ticket asynchronously
+         coroutineScope.launch {
+             val freshUrl = resolver.fetchFreshStreamUrl(contentId)
+             player.setMediaItem(MediaItem.fromUri(freshUrl), currentPos)
+             player.prepare()
+             player.play()
+         }
+     }
+     ```
+
+### 7. Strict Fullscreen Orientation Synchronization
+- When entering fullscreen mode, ExoPlayer controls must synchronize with `ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE` so that user gyro rotation between reverse-landscape and regular landscape is honored, but portrait rotation is strictly locked.
+- On exit, reset orientation to `SCREEN_ORIENTATION_PORTRAIT`, then release to `SCREEN_ORIENTATION_UNSPECIFIED`. Always wire Compose `BackHandler(enabled = isFullscreen)` to collapse fullscreen first rather than exiting the activity.
