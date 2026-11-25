@@ -45,3 +45,4 @@ for (match in matches) {
 1. **User-Agent & Client Hints**: Always supply authentic desktop Chrome or Android mobile User-Agent with matching `Sec-Ch-Ua` headers.
 2. **Persistent CookieJar**: Save cookies from initial homepage loads to ensure subsequent AJAX calls (`admin-ajax.php`) carry valid session tokens.
 3. **Strict Referer & Origin**: Gateway AJAX requests must always pass the portal base URL as `Referer` and `X-Requested-With: XMLHttpRequest`.
+4. **Anti-Block DoH DNS & Configurable Base URL**: Build scrapers on a shared DoH-enabled `OkHttpClient` (`1.1.1.1` / `8.8.8.8` with raw IP bootstrap) and expose `updateBaseUrl(newBaseUrl)` with cache eviction so users can switch mirror domains at runtime.

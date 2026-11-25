@@ -45,6 +45,9 @@ This document defines the governance rules, anti-hallucination protocols, token 
    - **STRICT FULLSCREEN LANDSCAPE LOCK**: Dedicated Fullscreen button must set `ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE` to strictly prevent unwanted portrait auto-rotation until the user explicitly taps shrink/exit or Back.
    - **COMPOSE PAGINATION DEDUPLICATION**: In infinite scroll feeds (`LazyVerticalGrid`), always enforce `.distinctBy { it.id }` and compound item keys (`"${item.id}_$index"`) to prevent fatal `IllegalArgumentException: Key was already used` crashes on overlapping server pages.
    - **SEMANTIC JSON EXTRACTION OVER BRITTLE REGEX**: Never rely on brittle regex expecting strict JSON key order (`"endpoint"` before `"ticket"`). First parse `<script id="watch-config" type="application/json">` using `JSONObject`. Implement independent regex fallbacks, auto-construct endpoints (`/video/$id/playback`), and auto-heal by re-fetching the referer page if the ticket is blank.
+   - **ANTI-BLOCK DoH DNS (`1.1.1.1` / `8.8.8.8`)**: All Scraper, Coil `ImageLoader`, and Media3 ExoPlayer `OkHttpClient` instances MUST share a `DohDnsResolver` (`okhttp-dnsoverhttps`) bootstrapping Cloudflare (`1.1.1.1`/`1.0.0.1`) and Google (`8.8.8.8`/`8.8.4.4`) via raw IP addresses (preventing ISP DNS poisoning) with fallback to `Dns.SYSTEM` and a user-selectable `DnsMode` (`AUTO_CF_GOOGLE`, `CLOUDFLARE_ONLY`, `GOOGLE_ONLY`, `SYSTEM`).
+   - **DYNAMIC DOMAIN / MIRROR OVERRIDE & DIAGNOSTICS**: Never hardcode an unchangeable portal domain. Persist a configurable `baseUrl` (defaulting to the primary domain) in preferences, propagate updates to the Scraper/Repository with immediate cache invalidation, and expose an in-app DNS & Domain/Mirror Settings UI with a live connection test (reporting resolved IP, provider, latency, and HTTP status).
+   - **TV BOX SINGLE-PAGE WINDOW PAGINATION & LOW-RAM GOVERNANCE**: On Android TV catalogs with deep pagination (100+ pages), NEVER accumulate unbounded pages via infinite scroll in `ArrayObjectAdapter`. Render 1 page at a time (`clear() + addAll()`), parse `totalPages` into `PaginatedMovies`, provide sticky Top/Bottom D-pad pagers + `PAGE_UP`/`PAGE_DOWN`/`CHANNEL_UP`/`CHANNEL_DOWN` remote keys + a **Jump-to-Page modal** (0–9 remote input + `-50`/`-10`/`+10`/`+50`/First/Last presets). Cap page/detail caches with bounded `LruCache`, prefetch at most 1 page ahead (HTML metadata only), configure Coil `.allowRgb565(true)`, and call `ImageView.dispose()` in `onUnbindViewHolder()`.
 
 7. **⚙️ Deterministic State Machine Contract**:
    - All collaborating agents operating under the harness MUST emit Structured Output adhering to the contract defined in `harness/schemas.py`.
@@ -71,7 +74,7 @@ This document defines the governance rules, anti-hallucination protocols, token 
 * **Configuration:**
   ```yaml
   name: stream_architect_agent
-  system_prompt: "You are the Principal Streaming Software Architect. Design clean, decoupled streaming architectures ensuring 100% shared business logic between TV and Mobile. Enforce Target SDK 36, Mermaid flowcharts, and atomic decomposition."
+  system_prompt: "You are the Principal Streaming Software Architect. Design clean, decoupled streaming architectures ensuring 100% shared business logic between TV and Mobile, including a shared DoH DNS (1.1.1.1/8.8.8.8) NetworkClientProvider and configurable mirror baseUrl. Enforce Target SDK 36, Mermaid flowcharts, and atomic decomposition."
   ```
 
 ### 🎬 Media3 Streaming Specialist (`stream_player_agent`)
@@ -87,7 +90,7 @@ This document defines the governance rules, anti-hallucination protocols, token 
 * **Configuration:**
   ```yaml
   name: stream_mobile_agent
-  system_prompt: "You are a Senior Android Mobile Engineer specializing in Jetpack Compose Material 3, VLC/MX Player touch gestures (brightness, volume, scrubbing, double-tap seek), Screen Lock, PiP lifecycle, and Becoming Noisy guards. Target SDK 36. Minimum 48x48 dp touch bounds. Never import Leanback in mobile."
+  system_prompt: "You are a Senior Android Mobile Engineer specializing in Jetpack Compose Material 3, VLC/MX Player touch gestures (brightness, volume, scrubbing, double-tap seek), Screen Lock, PiP lifecycle, Becoming Noisy guards, and in-app DNS (1.1.1.1/8.8.8.8) + Domain/Mirror settings. Target SDK 36. Minimum 48x48 dp touch bounds. Never import Leanback in mobile."
   ```
 
 ### 📺 Android TV Developer (`stream_tv_agent`)
@@ -95,7 +98,7 @@ This document defines the governance rules, anti-hallucination protocols, token 
 * **Configuration:**
   ```yaml
   name: stream_tv_agent
-  system_prompt: "You are a Senior Android TV Engineer specializing in Leanback UI, D-pad DPAD focus tree management, and 10-foot ergonomics. Always extend VideoSupportFragment to provide a valid video surface. Ensure all interactive components are D-pad focusable."
+  system_prompt: "You are a Senior Android TV Engineer specializing in Leanback UI, D-pad DPAD focus tree management, 10-foot ergonomics, Single-Page Window Pagination + Jump-to-Page (for low-RAM TV boxes), and D-pad accessible DNS (1.1.1.1/8.8.8.8) + Domain/Mirror settings. Always extend VideoSupportFragment to provide a valid video surface. Ensure all interactive components are D-pad focusable."
   ```
 
 ### 🕵️ Scraper & Reverse Engineer (`stream_scraper_agent`)
@@ -103,7 +106,7 @@ This document defines the governance rules, anti-hallucination protocols, token 
 * **Configuration:**
   ```yaml
   name: stream_scraper_agent
-  system_prompt: "You are a Streaming Reverse Engineer and Scraper Specialist. Master 2-step stream resolution (AJAX miru_custom_player -> torbo007 iframe -> tokenplay API -> m3u8 playlist), cookie persistence, and header spoofing."
+  system_prompt: "You are a Streaming Reverse Engineer and Scraper Specialist. Master 2-step stream resolution (AJAX miru_custom_player -> torbo007 iframe -> tokenplay API -> m3u8 playlist), DoH DNS (1.1.1.1/8.8.8.8) anti-block networking, dynamic mirror baseUrl routing, cookie persistence, and header spoofing."
   ```
 
 ### ⚙️ Backend Gateway Engineer (`stream_backend_agent`)
@@ -126,10 +129,11 @@ This document defines the governance rules, anti-hallucination protocols, token 
 
 ## 🧰 Curated & Tailored Skills Catalog (`.agents/skills/`)
 
-The following 18 specialized skills are integrated and tuned for `StreamAppExpert`:
+The following 19 specialized skills are integrated and tuned for `StreamAppExpert`:
 
 | Skill Name | Focus & Domain Tuning |
 |---|---|
+| `anti-block-dns-mirror` | DoH DNS (`1.1.1.1` / `8.8.8.8`) raw-IP bootstrap, shared `OkHttpClient`, mirror `baseUrl` override, connection diagnostics |
 | `stream-player-media3` | Media3 ExoPlayer, 252-byte PNG dummy prefix unmasking, SurfaceView, LoudnessEnhancer |
 | `stream-android-mobile` | Mobile Touch Player, VLC/MX gestures, Screen Lock, PiP, Becoming Noisy guard, SDK 36 |
 | `stream-android-tv` | Android TV Leanback, VideoSupportFragment surface, D-pad focus tree navigation |

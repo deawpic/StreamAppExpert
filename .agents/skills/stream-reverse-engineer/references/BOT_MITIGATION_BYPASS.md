@@ -32,3 +32,10 @@ class PersistentMemoryCookieJar : okhttp3.CookieJar {
     }
 }
 ```
+
+## 3. Anti-ISP Block DNS over HTTPS (1.1.1.1 / 8.8.8.8) & Mirror Override
+When ISPs apply DNS poisoning to streaming portals or embed CDNs, use `okhttp-dnsoverhttps` bootstrapped with literal IP addresses (never system DNS):
+- Primary DoH: `https://cloudflare-dns.com/dns-query` (`bootstrapDnsHosts`: `1.1.1.1`, `1.0.0.1`)
+- Secondary DoH: `https://dns.google/dns-query` (`bootstrapDnsHosts`: `8.8.8.8`, `8.8.4.4`)
+- Fallback: `Dns.SYSTEM`
+- Expose runtime `baseUrl` override (`PlayerPreferencesManager.baseUrl` -> `Scraper.updateBaseUrl()`) and clear all scraper caches upon domain change.

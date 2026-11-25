@@ -36,3 +36,9 @@ override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
     }
 }
 ```
+
+## 3. Grid Pagination Edge Focus & Remote Page Keys
+When pairing a 5-column `VerticalGridSupportFragment` with Top Sticky Header and Bottom Pager Bars:
+- Bind `gridView.nextFocusUpId = R.id.btn_page_jump` and `gridView.nextFocusDownId = R.id.btn_bottom_next`.
+- On top/bottom pager buttons, bind `nextFocusDown` / `nextFocusUp` back to `@id/category_fragment_container` so D-pad navigation seamlessly crosses between grid rows and pagers.
+- Intercept `KEYCODE_PAGE_UP` / `KEYCODE_CHANNEL_UP` (previous page) and `KEYCODE_PAGE_DOWN` / `KEYCODE_CHANNEL_DOWN` (next page) in `dispatchKeyEvent()`.

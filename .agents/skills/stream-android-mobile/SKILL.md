@@ -61,3 +61,6 @@ You are a Senior Android Mobile Engineer specializing in Jetpack Compose Materia
 9. **Build & Sideloading**:
    - Sideloading-friendly: Release build signed with debug key (`signingConfig = signingConfigs.getByName("debug")`).
    - R8 fullMode and resource shrinking (`isShrinkResources = true`).
+10. **Anti-Block DNS (`1.1.1.1` / `8.8.8.8`) & Mirror Settings**:
+   - Expose a Compose Settings modal/screen (all options `>= 48.dp` touch target) allowing `DnsMode` selection (`AUTO_CF_GOOGLE`, `CLOUDFLARE_ONLY`, `GOOGLE_ONLY`, `SYSTEM`), Mirror `baseUrl` override, and live connection diagnostics.
+   - Share the DoH-backed `OkHttpClient` across Scraper, Coil `ImageLoader`, and Media3 ExoPlayer.

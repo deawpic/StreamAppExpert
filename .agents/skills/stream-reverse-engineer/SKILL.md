@@ -69,3 +69,9 @@ Never rely on brittle regex like `Regex(""""sources"\s*:\s*\[\s*\{\s*"file"\s*:\
 - Temporary presigned URLs (`?expires=1731590000`, `?X-Amz-Expires=3600`) expire within 60 minutes.
 - NEVER store raw expiring stream URLs in Watch History, Favorites, or Room databases.
 - Store canonical content identifiers (`videoId` or `/video/{id}`). Fetch a fresh stream ticket upon playback initialization.
+
+---
+
+### Pipeline C: Anti-ISP Block DNS (1.1.1.1 / 8.8.8.8 DoH) & Mirror Base URL Override
+- **Shared DoH Client**: Route all portal, embed, image, and segment HTTP calls through a shared `OkHttpClient` configured with `DohDnsResolver` (`https://cloudflare-dns.com/dns-query` bootstrapped with `1.1.1.1`/`1.0.0.1`, falling back to `https://dns.google/dns-query` bootstrapped with `8.8.8.8`/`8.8.4.4`, then `Dns.SYSTEM`).
+- **Dynamic Mirror Base URL**: Keep `baseUrl` mutable via `updateBaseUrl(newUrl)` and clear `home`, `category`, `detail`, and `stream` caches immediately when the user switches domain/mirror in Settings.

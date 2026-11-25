@@ -14,6 +14,10 @@ Encapsulates real-world empirical streaming bug fixes, anti-patterns, and archit
 11. ANDROID_14_RECEIVER_EXPORT_FLAG: Enforces RECEIVER_NOT_EXPORTED on registerReceiver (prevents SecurityException).
 12. FULLSCREEN_ORIENTATION_SENSOR_LOCK: Recommends SCREEN_ORIENTATION_SENSOR_LANDSCAPE for natural 180-deg flip.
 13. COMPOSE_LAZY_ITEMS_DUPLICATE_KEY: Recommends deduplication and composite keys for pagination.
+14. DOH_BOOTSTRAP_IP_GUARD: Ensures DnsOverHttps configures raw bootstrapDnsHosts (1.1.1.1 / 8.8.8.8) to resist ISP DNS poisoning.
+15. SCRAPER_SHARED_DOH_CLIENT: Warns if a Scraper creates an isolated OkHttpClient without .dns(...) instead of using shared DoH NetworkClientProvider.
+16. TV_UNBOUNDED_CACHE_RISK: Warns if a TV Scraper caches pages in an unbounded ConcurrentHashMap instead of bounded LruCache.
+17. TV_COIL_LOW_RAM_GUARD: Warns if a TV Leanback CardPresenter loads images with Coil without allowRgb565(true) or dispose() on unbind.
 """
 
 from __future__ import annotations
@@ -145,8 +149,8 @@ class StreamingRulesEngine:
                     )
 
         # Rule 5: MASKED_TS_PREFIX_OFFSET
-        # Check that 252-byte PNG dummy prefix is explicitly handled if unmasking is mentioned
-        if "MaskedTs" in rel_path or "MaskedTsDataSource" in content:
+        # Check that 252-byte PNG dummy prefix is explicitly handled in MaskedTsDataSource implementation
+        if "maskedtsdatasource" in rel_path.lower() or "class MaskedTsDataSource" in content:
             if "252" not in content and "0xFC" not in content and "0xfc" not in content:
                 violations.append(
                     StreamingRuleViolation(
@@ -164,17 +168,21 @@ class StreamingRulesEngine:
         # Hardware LoudnessEnhancer crashes on TV SoCs (Amlogic, ZTE) with HLS multi-audio streams
         is_tv = "tv" in rel_path.lower()
         if "LoudnessEnhancer" in content and is_tv:
-            violations.append(
-                StreamingRuleViolation(
-                    rule_id="SOUND_BOOST_SAFE_SCALING",
-                    rule_name="Hardware Audio Effect TV Crash Risk",
-                    severity="WARNING",
-                    file_path=rel_path,
-                    line_number=None,
-                    message="Using hardware 'LoudnessEnhancer' on Android TV triggers AudioFlinger rejection and infinite rebuffering on HLS multi-audio streams.",
-                    recommendation="Use safe linear software volume scaling via 'exoPlayer.volume = multiplier' (1.0x - 2.4x) as documented in CASE_STUDY_AUDIO_BOOST_TV_CRASH.md.",
-                )
-            )
+            for idx, line in enumerate(lines, 1):
+                s = line.strip()
+                if "LoudnessEnhancer" in line and not s.startswith("//") and not s.startswith("*"):
+                    violations.append(
+                        StreamingRuleViolation(
+                            rule_id="SOUND_BOOST_SAFE_SCALING",
+                            rule_name="Hardware Audio Effect TV Crash Risk",
+                            severity="WARNING",
+                            file_path=rel_path,
+                            line_number=idx,
+                            message="Using hardware 'LoudnessEnhancer' on Android TV triggers AudioFlinger rejection and infinite rebuffering on HLS multi-audio streams.",
+                            recommendation="Use safe linear software volume scaling via 'exoPlayer.volume = multiplier' (1.0x - 2.4x) as documented in CASE_STUDY_AUDIO_BOOST_TV_CRASH.md.",
+                        )
+                    )
+                    break
 
         # Rule 7: PIP_LIFECYCLE_COMPAT
         if "enterPictureInPictureMode(" in content or "PictureInPictureParams.Builder" in content:
@@ -244,6 +252,74 @@ class StreamingRulesEngine:
                             recommendation="Deduplicate via .distinctBy { it.id } in ViewModel and use compound key '${it.id}_$index' in Compose.",
                         )
                     )
+
+        # Rule 11: DOH_BOOTSTRAP_IP_GUARD
+        # DnsOverHttps without bootstrapDnsHosts still queries poisoned ISP DNS for cloudflare-dns.com / dns.google
+        if "DnsOverHttps.Builder()" in content and "bootstrapDnsHosts" not in content:
+            violations.append(
+                StreamingRuleViolation(
+                    rule_id="DOH_BOOTSTRAP_IP_GUARD",
+                    rule_name="DoH Raw IP Bootstrap Missing",
+                    severity="ERROR",
+                    file_path=rel_path,
+                    line_number=None,
+                    message="DnsOverHttps.Builder() is missing bootstrapDnsHosts (1.1.1.1 / 8.8.8.8). Poisoned ISP DNS can block DoH hostnames.",
+                    recommendation="Configure .bootstrapDnsHosts(1.1.1.1, 1.0.0.1) for Cloudflare and (8.8.8.8, 8.8.4.4) for Google.",
+                )
+            )
+
+        # Rule 12: SCRAPER_SHARED_DOH_CLIENT
+        # Scrapers should use NetworkClientProvider (with DoH) rather than raw OkHttpClient without dns(...)
+        if "scraper" in rel_path.lower() and "OkHttpClient.Builder()" in content and ".dns(" not in content:
+            violations.append(
+                StreamingRuleViolation(
+                    rule_id="SCRAPER_SHARED_DOH_CLIENT",
+                    rule_name="Scraper Missing Anti-Block DoH DNS",
+                    severity="WARNING",
+                    file_path=rel_path,
+                    line_number=None,
+                    message="Scraper builds a standalone OkHttpClient without .dns(...), bypassing 1.1.1.1 / 8.8.8.8 anti-block DNS.",
+                    recommendation="Use shared NetworkClientProvider.scraperClient backed by DohDnsResolver (1.1.1.1 / 8.8.8.8).",
+                )
+            )
+
+        # Rule 13: TV_UNBOUNDED_CACHE_RISK
+        # Deep pagination (600+ pages) must use bounded LruCache instead of unbounded ConcurrentHashMap for page/detail caches
+        if is_tv and "scraper" in rel_path.lower():
+            for idx, line in enumerate(lines, 1):
+                s = line.strip()
+                if (
+                    ("categoryCache" in line or "categoryPageCache" in line or "pageCache" in line)
+                    and "ConcurrentHashMap" in line
+                    and not s.startswith("//")
+                ):
+                    violations.append(
+                        StreamingRuleViolation(
+                            rule_id="TV_UNBOUNDED_CACHE_RISK",
+                            rule_name="Unbounded Page Cache on Low-RAM TV Box",
+                            severity="WARNING",
+                            file_path=rel_path,
+                            line_number=idx,
+                            message="Category/page cache uses unbounded ConcurrentHashMap, risking RAM bloat across hundreds of pages on TV boxes.",
+                            recommendation="Use android.util.LruCache (e.g., max 15 pages) for bounded memory usage.",
+                        )
+                    )
+
+        # Rule 14: TV_COIL_LOW_RAM_GUARD
+        # Leanback image presenters should enable allowRgb565(true) and dispose() on unbind to save TV Box RAM
+        if is_tv and "presenter" in rel_path.lower() and ".load(" in content:
+            if "allowRgb565(true)" not in content or ".dispose()" not in content:
+                violations.append(
+                    StreamingRuleViolation(
+                        rule_id="TV_COIL_LOW_RAM_GUARD",
+                        rule_name="TV Poster Coil Low-RAM Optimization Missing",
+                        severity="WARNING",
+                        file_path=rel_path,
+                        line_number=None,
+                        message="TV Presenter uses Coil .load() without allowRgb565(true) and/or dispose() in onUnbindViewHolder().",
+                        recommendation="Enable allowRgb565(true) to halve poster bitmap RAM and call imageView.dispose() in onUnbindViewHolder().",
+                    )
+                )
 
         return violations
 

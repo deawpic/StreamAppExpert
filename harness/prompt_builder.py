@@ -36,6 +36,7 @@ ROLE_SKILL_MAP: Dict[str, str] = {
     "redis_agent": ".agents/skills/redis/SKILL.md",
     "web_scraper_agent": ".agents/skills/web-scraper/SKILL.md",
     "android_dev_agent": ".agents/skills/android-dev/SKILL.md",
+    "dns_mirror_agent": ".agents/skills/anti-block-dns-mirror/SKILL.md",
 }
 
 
@@ -138,7 +139,9 @@ class PromptOnDemandBuilder:
             "- **CACHE-CONTROL PRESERVATION**: NEVER add `no-cache` to media segment responses. Preserve CDN origin cache headers for smooth seeking/scrubbing.\n"
             "- **LEANBACK VIDEO SURFACE**: Never extend raw `PlaybackSupportFragment` without a surface. Use `VideoSupportFragment` + `VideoSupportFragmentGlueHost`.\n"
             "- **MOBILE TOUCH ERGONOMICS**: Mobile UI must be 100% Jetpack Compose Material 3 with 48×48 dp minimum touch targets. Zero Leanback imports in mobile.\n"
-            "- **AUDIO BOOST**: Use Android `LoudnessEnhancer` attached to `player.audioSessionId` for clean volume amplification without clipping.\n"
+            "- **AUDIO BOOST**: Default to Safe Software Volume Scaling via `exoPlayer.volume = multiplier` (1.0x - 2.4x). Avoid hardware `LoudnessEnhancer` on Android TV.\n"
+            "- **ANTI-BLOCK DoH DNS & MIRROR**: Share `DohDnsResolver` (`1.1.1.1` / `8.8.8.8` with raw IP bootstrap) across Scraper, Coil, and Media3; support runtime `baseUrl` mirror override + connection test UI.\n"
+            "- **TV BOX PAGINATION & LOW-RAM**: Use Single-Page Window + Jump-to-Page (no infinite-scroll accumulation across 100+ pages), bounded `LruCache`, Coil `allowRgb565(true)`, and `dispose()` on unbind.\n"
             "- **ZERO-TEST BY DEFAULT**: Focus 100% on production code. Do NOT write or execute tests unless explicitly ordered.\n"
         )
 

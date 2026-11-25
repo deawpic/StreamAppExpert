@@ -29,15 +29,19 @@ You are an expert Code Reviewer and Anti-Hallucination Gatekeeper evaluating pul
 - **ExoPlayer Lifecycle**: Ensure player events are managed in `DisposableEffect` (pause on `ON_PAUSE`, release on `onDispose`).
 - **Coroutine Scope**: Are background jobs launched in `viewModelScope` rather than unconfined global scopes?
 
-### 3. 🔒 Security & Anti-Bot Protection
+### 3. 🔒 Security, Anti-Block DNS & Mirror Resilience
 - Are authentication tokens and MD5 hashes safely handled without logging secrets?
 - Are User-Agent, Referer, and Origin headers correctly configured for gateway requests?
 - Does OkHttp auto-heal Referer headers when stream redirects across CDN domains?
+- **DoH Bootstrap Integrity**: Does `DohDnsResolver` configure `bootstrapDnsHosts` with raw IP literals (`1.1.1.1`/`1.0.0.1`, `8.8.8.8`/`8.8.4.4`) and share one DNS resolver across Scraper, Coil `ImageLoader`, and Media3 `OkHttpClient`?
+- **Dynamic Mirror Base URL**: Can `baseUrl` be overridden at runtime via preferences, and does updating it clear scraper caches immediately?
 
 ### 4. ⚡ Performance & Memory
 - Are heavy regex patterns compiled once (`companion object`) rather than inside loops?
 - Is `derivedStateOf` used for rapid player progress updates to avoid unnecessary recomposition?
-- Are hardware `LoudnessEnhancer` instances released upon player destruction?
+- Are hardware `LoudnessEnhancer` instances avoided on TV or released upon player destruction?
+- **TV Box Low-RAM Pagination**: For deep TV catalogs (100+ pages), does the category grid use Single-Page Window (`clear() + addAll()`) + Jump-to-Page and a bounded `LruCache` (never unbounded `ConcurrentHashMap` or infinite-scroll accumulation)?
+- **TV Poster Bitmap Memory**: Do Leanback card presenters configure Coil `.allowRgb565(true)` and call `imageView.dispose()` in `onUnbindViewHolder()`?
 
 ### 5. 🏗️ Architectural Boundaries
 - Are changes kept within the atomic line cap (< 200 lines modified)?
